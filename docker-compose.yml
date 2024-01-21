@@ -2,17 +2,25 @@ version: '3'
 services:
   dispositivo1:
     build: .
+    environment:
+      - PORT=3001
     ports:
-      - "3001:3000"
+      - "3001:3001"
   dispositivo2:
     build: .
+    environment:
+      - PORT=3002
     ports:
-      - "3002:3000"
+      - "3002:3002"
   dispositivo3:
     build: .
+    environment:
+      - PORT=3003
     ports:
-      - "3003:3000"
+      - "3003:3003"
   dispositivo4:
     build: .
+    environment:
+      - PORT=3004
     ports:
-      - "3004:3000"
+      - "3004:3004"

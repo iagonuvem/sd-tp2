@@ -11,7 +11,7 @@ COPY . /app
 RUN npm install
 
 # Expor a porta (assumindo que usaremos a porta 3000)
-EXPOSE 3000
+# EXPOSE 3000
 
 # Comando para iniciar o aplicativo
 CMD ["node", "index.js"]
