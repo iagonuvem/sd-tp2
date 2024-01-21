@@ -1,0 +1,18 @@
+version: '3'
+services:
+  dispositivo1:
+    build: .
+    ports:
+      - "3001:3000"
+  dispositivo2:
+    build: .
+    ports:
+      - "3002:3000"
+  dispositivo3:
+    build: .
+    ports:
+      - "3003:3000"
+  dispositivo4:
+    build: .
+    ports:
+      - "3004:3000"

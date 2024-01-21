@@ -1,0 +1,14 @@
+{
+    "name": "sd-tp2",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+      "start": "node index.js"
+    },
+    "dependencies": {
+      "express": "^4.17.1",
+      "socket.io": "^4.0.0"
+    }
+  }
+  
