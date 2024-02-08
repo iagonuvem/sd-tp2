@@ -23,6 +23,7 @@ let maquinas = [
     'http://dispositivo4:3004'
 ]; // Usado para realizar a conexão com outras máquinas
 
+let queue = [];
 let conexoes = new Map(); // Armazena IDs das conexoes conectados como chaves
 let hosts = new Map();
 let acks = new Map();
@@ -40,6 +41,23 @@ acks.set('hosts', hosts);
 if(COORDINATOR === 'true') acks.set('coordinator', `${HOSTNAME}:${PORT}`);
 
 // CLIENTE
+app.get('/', (req, res) => {
+    // io.emit('request_access', req);
+    console.log('Hosts:', hosts);
+    console.log('ACKS:', acks);
+    console.log('conexoes:', conexoes.keys());
+
+    const coordinator = acks.get('coordinator');
+    if(coordinator != `${HOSTNAME}:${PORT}`){
+        const fixedCoord = coordinator.toString().split(':')[0];
+        const socket = conexoes.get(`${fixedCoord}_SERVER`);
+
+        console.log(`SOCKET Id:`, socket.id);
+        io.to(socket.id).emit('request_access', req);
+    }
+    res.send(`Servidor na porta ${PORT} está funcionando! O coordenador é ${coordinator}`);
+});
+
 setTimeout(() => { // Para dar tempo das maquinas subirem
     // Conectar a outros dispositivos
     maquinas.forEach((maquina) => {
@@ -93,8 +111,7 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
                 // TO-DO: Atualizar coordenador dentro de 'hosts'
                 socket.on('new_coordinator', (keyval) => {
-                    console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
-
+                    // console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
                     const acks = new Map(keyval);
 
                     // console.log(`${type}: new_coordinator ACK.hosts:`, hosts);
@@ -142,11 +159,6 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
     });
     
 }, 5000);
-
-app.get('/', (req, res) => {
-    res.send(`Servidor na porta ${PORT} está funcionando!`);
-    io.emit('request_access', req);
-});
 
 // SERVIDOR
 io.on('connection', (socket) => {
@@ -198,9 +210,21 @@ io.on('connection', (socket) => {
         // Implemente a lógica de eleição aqui
     });
 
-    socket.on('request_access', (req) => {
+    socket.on('request_access', (req, callback) => {
+        const now = new Date();
         console.log(`${type}: Dispositivo ${socket.id} solicitou acesso`);
-        console.log(`${type} req:`, req);
+        if(queue.length == 0){
+            queue.push({socketId: socket.id, timestamp: now.getTime()});
+            callback(true);
+
+            setTimeout(() => {
+                queue.splice(0,1);
+            }, 200);
+        } else {
+            queue.push({socketId: socket.id, timestamp: now.getTime()});
+            callback(false);
+        }
+        // console.log(`${type} req:`, req);
         // Adicione à fila e gerencie a concessão de acesso aqui
     });
 });
