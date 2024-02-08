@@ -81,7 +81,6 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
                     });
                 });
 
-                // TO-DO: REFACTOR parte do keyval
                 socket.on('acks_client', (keyval) => {
                     // console.log(`${type}: ACKNOWLEDGE!`);
                     // console.log(`${type} Keyval: `, JSON.stringify(keyval));
@@ -94,16 +93,21 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
                 // TO-DO: Atualizar coordenador dentro de 'hosts'
                 socket.on('new_coordinator', (keyval) => {
-                    // console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
+                    console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
 
                     const acks = new Map(keyval);
-                    const hosts = new Map(acks.get('hosts'));
 
                     // console.log(`${type}: new_coordinator ACK.hosts:`, hosts);
                     console.log(`${type}: Habemus Coordenador! `, JSON.stringify(acks.get('coordinator')));
 
                     acks.delete('election');
-                    acks.set('hosts', [...hosts.entries()]);
+
+                    if(acks.get('hosts').size > 0){
+                        // console.log('new_coordinator hosts', hosts);
+                        const hosts = new Map(acks.get('hosts'));
+                        acks.set('hosts', [...hosts.entries()]);
+                    }
+                    
                     acks.set('coordinator', acks.get('coordinator'));
 
                     socket.emit('acks', [...acks.entries()], (newValues) => {
@@ -141,7 +145,7 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
 app.get('/', (req, res) => {
     res.send(`Servidor na porta ${PORT} está funcionando!`);
-    io.emit('message', `Mensagem do servidor na porta ${PORT}: Rota GET acessada.`);
+    io.emit('request_access', req);
 });
 
 // SERVIDOR
@@ -170,7 +174,7 @@ io.on('connection', (socket) => {
 
         const hosts = new Map(acks.get('hosts'));
         // conexoes.delete(`${headers.client}_${type}`);
-        // hosts.delete(`${headers.client}:${headers.client_port}`);
+        hosts.delete(`${headers.client}:${headers.client_port}`);
         // console.log(`${type}: Disconnect`, hosts);
 
         acks.set('hosts', [...hosts.entries()]);
@@ -194,8 +198,9 @@ io.on('connection', (socket) => {
         // Implemente a lógica de eleição aqui
     });
 
-    socket.on('request_access', () => {
+    socket.on('request_access', (req) => {
         console.log(`${type}: Dispositivo ${socket.id} solicitou acesso`);
+        console.log(`${type} req:`, req);
         // Adicione à fila e gerencie a concessão de acesso aqui
     });
 });
@@ -222,27 +227,23 @@ function iniciarEleicao(socket){
         const hosts = new Map(acks.get('hosts'));
         let winner;
         
-        console.log('INICIAR ELEICAO HOSTS:', hosts);
+        console.log('HOSTS DA ELEIÇÃO:', hosts);
         hosts.forEach((hostData, hostName) => { // Percorre vizinho por vizinho para comparar o timestamp
             winner = percorreAnel(hostName, [...hosts.entries()]);
         })
 
         console.log('WINNER:' , winner);
         acks.set('coordinator', winner);
-
+        
         hosts.forEach((hostData, hostName) => { // Percorre vizinho por vizinho para comparar o timestamp
-            if(hostName == winner){
-                hostData.coordinator = true;
-            }
-            hostData.coordinator = false;
-
-            hosts.set(hostName, hostData);
+            hostData.coordinator = (hostName == winner);
         })
-        acks.set('hosts', [...hosts.entries()]);
 
         setTimeout(() => {
+            acks.set('hosts', [...hosts.entries()]);
             socket.broadcast.emit('new_coordinator', [...acks.entries()]);
         }, 500);
+        
     }
 }
 
@@ -261,11 +262,10 @@ function setAcks(keyval, type) {
                 acks.set('election', parsedElection);
                 break;
             case 'hosts':
-                console.log(`${type} rawValue:`, p[1]);
+                // console.log(`${type} HOSTS rawvalue:`, p[1])
                 const parsedHosts = new Map(p[1]);
                 parsedHosts.forEach((hostData, hostName) => {
-                    // console.log('hostName', hostName);
-                    // console.log('hostData', hostData);
+
                     if (hostData.coordinator == 'true') {
                         console.log(`${type}: ${hostName} é coordenador!`);
                         acks.set('coordinator', hostName);
@@ -287,7 +287,7 @@ function setAcks(keyval, type) {
 
 function percorreAnel(host, hosts) {
     const newHosts = new Map(hosts);
-
+    
     if(!newHosts.has(host)){
         return;
     }
@@ -301,7 +301,6 @@ function percorreAnel(host, hosts) {
         if (data.timestamp < greater) {
             greater = data.timestamp;
             winner = hostName;
-            // acks.set('winner', h[0]);
         }
     })
 
