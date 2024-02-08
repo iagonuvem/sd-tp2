@@ -147,6 +147,9 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
                     if(queue.length == 0){
                         queue.push({socketId: socket.id, timestamp: now.getTime()});
                         callback(true);
+                        setTimeout(() => {
+                            queue.splice(0,1);
+                        }, 200);
                     } else {
                         queue.push({socketId: socket.id, timestamp: now.getTime()});
                         callback(false);
