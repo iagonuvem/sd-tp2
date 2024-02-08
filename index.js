@@ -50,7 +50,9 @@ app.get('/', (req, res) => {
         const socket = conexoes.get(`${fixedCoord}_SERVER`);
 
         console.log(`SOCKET Id:`, socket.id);
-        io.to(socket.id).emit('request_access', req);
+        io.to(socket.id).emit('request_access', {}, (obj) => {
+            console.log(obj);
+        });
     }
     res.send(`Servidor na porta ${PORT} está funcionando! O coordenador é ${coordinator}`);
 });
@@ -137,6 +139,18 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
                     acks.set('hosts', [...hosts.entries()]);
                     socket.emit('acks', [...acks.entries()], (newValues) => {setAcks(newValues, 'CLIENT')});                   
+                });
+
+                socket.on('request_access', (req, callback) => {
+                    const now = new Date();
+                    console.log(`${type}: Dispositivo ${socket.id} solicitou acesso`);
+                    if(queue.length == 0){
+                        queue.push({socketId: socket.id, timestamp: now.getTime()});
+                        callback(true);
+                    } else {
+                        queue.push({socketId: socket.id, timestamp: now.getTime()});
+                        callback(false);
+                    }
                 });
 
             } catch (error) {
