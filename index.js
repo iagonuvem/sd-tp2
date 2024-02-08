@@ -33,9 +33,6 @@ hosts.set(`${HOSTNAME}:${PORT}`, {
     timestamp: new Date().getTime()
 })
 
-// acks.set('election', null);
-// acks.set('coordinator', null);
-// acks.set('file', null);
 acks.set('hosts', hosts);
 
 if(COORDINATOR === 'true') acks.set('coordinator', `${HOSTNAME}:${PORT}`);
@@ -74,14 +71,6 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
                     }
                 });
 
-                // TO-DO: REFATORAR
-                // socket.on("connect_error", (err) => {
-                //     console.log(`${type}: ERRO DE CONEXAO ${err.message}`);
-                //     // console.log(`${type}: Socket`, socket);
-                //     console.log(`${type}: Endereco`, socket._opts.hostname);
-                //     console.log(conexoes.keys());
-                // })
-
                 socket.on("connect", () => {
                     console.log(`${type}: CONEXÃO ESTABELECIDA! ${HOSTNAME} -> ${maquina}`)
                     
@@ -109,7 +98,6 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
                     });
                 })
 
-                // TO-DO: Atualizar coordenador dentro de 'hosts'
                 socket.on('new_coordinator', (keyval) => {
                     // console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
                     const acks = new Map(keyval);
@@ -153,7 +141,6 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
             } catch (error) {
                 console.log(`${type}: `, error.type);
-                // console.log(error);
             }
         }
     });
@@ -167,25 +154,18 @@ io.on('connection', (socket) => {
     const headers = socket.handshake.headers;
     // console.log(`${type}: Custom Headers:`, headers);
 
-    // console.log('QUANTIDADE DE HOSTS:', hosts.size);
     conexoes.set(`${headers.client}_${type}`, {...socket, timestamp: now.getTime()});
-    
     console.log(`${type}: Conexoes: `, JSON.stringify([...conexoes.keys()]));
     // console.log(`${type}: Total de conexões: ${conexoes.size}`);
 
-    // Eleger um novo coordenador se necessário
-    // if (!acks.get('coordinator')) {
-    //     elegerCoordenador(socket);
-    // }
 
     socket.on('disconnect', () => {
         console.log(`${type}: CONEXÃO ENCERRADA! ${headers.host} -> ${headers.client}:${headers.client_port}`);
         const coordenador = acks.get('coordinator');
         // console.log(`${type}: Conexoes:`, conexoes.keys());
-        
 
         const hosts = new Map(acks.get('hosts'));
-        // conexoes.delete(`${headers.client}_${type}`);
+        conexoes.delete(`${headers.client}_${type}`);
         hosts.delete(`${headers.client}:${headers.client_port}`);
         // console.log(`${type}: Disconnect`, hosts);
 
@@ -200,14 +180,8 @@ io.on('connection', (socket) => {
 
     socket.on('acks', (keyval, callback) => {
         // console.log(`${type}: ACKNOWLEDGE!`);
-        
         const acks = setAcks(keyval, 'SERVER');
         callback(acks);        
-    });
-
-    socket.on('ack_coordinator', (coordinator) => {
-        console.log(`${type}: Habemus Coordenador: ${JSON.parse(coordinator)}`);
-        // Implemente a lógica de eleição aqui
     });
 
     socket.on('request_access', (req, callback) => {
@@ -224,8 +198,6 @@ io.on('connection', (socket) => {
             queue.push({socketId: socket.id, timestamp: now.getTime()});
             callback(false);
         }
-        // console.log(`${type} req:`, req);
-        // Adicione à fila e gerencie a concessão de acesso aqui
     });
 });
 
@@ -278,11 +250,6 @@ function setAcks(keyval, type) {
         switch (p[0]) {
             case 'election':
                 const parsedElection = JSON.parse(JSON.stringify(p[1]));
-                // const cached = JSON.parse(JSON.stringify(acks.get('election')));
-
-                // if((cached && cached.started_at) > parsedElection.started_at){
-                //     acks.set('election', parsedElection);
-                // }
                 acks.set('election', parsedElection);
                 break;
             case 'hosts':
@@ -296,8 +263,6 @@ function setAcks(keyval, type) {
                     };
                     hosts.set(hostName, hostData);
                 })
-                // console.log(`${type} Hosts: `, parsedHosts);
-                // console.log(`${type} Hosts Entries: `, [...parsedHosts.entries()]);
                 acks.set('hosts', parsedHosts);
                 break;
             default:
