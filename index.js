@@ -35,7 +35,7 @@ hosts.set(`${HOSTNAME}:${PORT}`, {
 // acks.set('election', null);
 // acks.set('coordinator', null);
 // acks.set('file', null);
-acks.set('hosts', [...hosts.entries()]);
+acks.set('hosts', hosts);
 
 if(COORDINATOR === 'true') acks.set('coordinator', `${HOSTNAME}:${PORT}`);
 
@@ -83,8 +83,9 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
                 // TO-DO: REFACTOR parte do keyval
                 socket.on('acks_client', (keyval) => {
-                    console.log(`${type}: ACKNOWLEDGE!`);
-                    console.log(`${type} Keyval: `, JSON.stringify(keyval));
+                    // console.log(`${type}: ACKNOWLEDGE!`);
+                    // console.log(`${type} Keyval: `, JSON.stringify(keyval));
+
                     socket.emit('acks', keyval, (newValues) => {
                         // console.log(`${type}: NewValues `, newValues);
                         setAcks(newValues, 'CLIENT');
@@ -93,48 +94,39 @@ setTimeout(() => { // Para dar tempo das maquinas subirem
 
                 // TO-DO: Atualizar coordenador dentro de 'hosts'
                 socket.on('new_coordinator', (keyval) => {
-                    const data = JSON.parse(JSON.stringify(keyval));
-                    data.map((d) => {
-                        if(d[0] === 'hosts'){
-                            const newHosts = new Map();
-                            acks.get('hosts').map((h) => {
-                                newHosts.set(h[0], h[1]);
-                            })
-                            acks.set('hosts', [...newHosts.entries()]);
-                        } else {
-                            acks.set(d[0],d[1]);
-                            if(d[0] === 'winner') acks.set('coordinator', d[1]);
-                        }
-                    })
-                    acks.delete('election');
-                    acks.delete('winner');
+                    // console.log(`${type} new_coordinator Keyval: `, JSON.stringify(keyval));
+
+                    const acks = new Map(keyval);
+                    const hosts = new Map(acks.get('hosts'));
+
+                    // console.log(`${type}: new_coordinator ACK.hosts:`, hosts);
                     console.log(`${type}: Habemus Coordenador! `, JSON.stringify(acks.get('coordinator')));
 
-                    // console.log(`${type} Keyval: `, JSON.stringify(coordinator));
-                    // acks.set('coordinator', coordinator);
+                    acks.delete('election');
+                    acks.set('hosts', [...hosts.entries()]);
+                    acks.set('coordinator', acks.get('coordinator'));
+
                     socket.emit('acks', [...acks.entries()], (newValues) => {
                         setAcks(newValues, 'CLIENT');
                     });
                 })
 
-                socket.on('disconnect', async () => {
+                socket.on('disconnect', () => {
                     const server = `${socket._opts.hostname}:${socket._opts.port}`;
                     console.log(`${type}: CONEXÃO ENCERRADA! ${HOSTNAME} -> ${server}`);
 
                     const coordinator = acks.get('coordinator');
                     if(server === coordinator) {
                         console.log(`${type}: O COORDENADOR CAIU!`);
-                        acks.delete('coordinator');
+                        // acks.delete('coordinator');
                     };
 
                     conexoes.delete(`${HOSTNAME}_${type}`);
 
-                    const newHosts = new Map();
-                    acks.get('hosts').map((h) => {
-                        newHosts.set(h[0], h[1]);
-                    })
-                    newHosts.delete(server);
-                    acks.set('hosts', [...newHosts.entries()]);
+                    const hosts = new Map(acks.get('hosts'));
+                    hosts.delete(server);
+
+                    acks.set('hosts', [...hosts.entries()]);
                     socket.emit('acks', [...acks.entries()], (newValues) => {setAcks(newValues, 'CLIENT')});                   
                 });
 
@@ -174,17 +166,14 @@ io.on('connection', (socket) => {
         console.log(`${type}: CONEXÃO ENCERRADA! ${headers.host} -> ${headers.client}:${headers.client_port}`);
         const coordenador = acks.get('coordinator');
         // console.log(`${type}: Conexoes:`, conexoes.keys());
-        // console.log(`${type}: Coordenador:`, coordenador);
+        
 
-        const newHosts = new Map();
-        acks.get('hosts').map((h) => {
-            newHosts.set(h[0], h[1]);
-        })
+        const hosts = new Map(acks.get('hosts'));
+        // conexoes.delete(`${headers.client}_${type}`);
+        // hosts.delete(`${headers.client}:${headers.client_port}`);
+        // console.log(`${type}: Disconnect`, hosts);
 
-        conexoes.delete(`${headers.client}_${type}`);
-        newHosts.delete(`${headers.client}:${headers.client_port}`);
-        acks.set('hosts', [...newHosts.entries()]);
-
+        acks.set('hosts', [...hosts.entries()]);
         socket.broadcast.emit('acks_client', [...acks.entries()]);
 
         // Verificar se o coordenador caiu pra chamar eleição
@@ -194,7 +183,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('acks', (keyval, callback) => {
-        console.log(`${type}: ACKNOWLEDGE!`);
+        // console.log(`${type}: ACKNOWLEDGE!`);
         
         const acks = setAcks(keyval, 'SERVER');
         callback(acks);        
@@ -209,8 +198,6 @@ io.on('connection', (socket) => {
         console.log(`${type}: Dispositivo ${socket.id} solicitou acesso`);
         // Adicione à fila e gerencie a concessão de acesso aqui
     });
-
-    socket.on('get_coordinator', () => {});
 });
 
 io.engine.on("connection_error", (err) => {
@@ -232,20 +219,36 @@ function iniciarEleicao(socket){
         acks.set('election', election);
         socket.broadcast.emit('acks_client', [...acks.entries()]);
 
+        const hosts = new Map(acks.get('hosts'));
         let winner;
-        acks.get('hosts').map((h) => { // Percorre vizinho por vizinho para comparar o timestamp
-            winner = percorreAnel(h[0]);
+        
+        console.log('INICIAR ELEICAO HOSTS:', hosts);
+        hosts.forEach((hostData, hostName) => { // Percorre vizinho por vizinho para comparar o timestamp
+            winner = percorreAnel(hostName, [...hosts.entries()]);
         })
 
         console.log('WINNER:' , winner);
-        acks.set('winner', winner);
-        socket.broadcast.emit('new_coordinator', [...acks.entries()]);
+        acks.set('coordinator', winner);
+
+        hosts.forEach((hostData, hostName) => { // Percorre vizinho por vizinho para comparar o timestamp
+            if(hostName == winner){
+                hostData.coordinator = true;
+            }
+            hostData.coordinator = false;
+
+            hosts.set(hostName, hostData);
+        })
+        acks.set('hosts', [...hosts.entries()]);
+
+        setTimeout(() => {
+            socket.broadcast.emit('new_coordinator', [...acks.entries()]);
+        }, 500);
     }
 }
 
 function setAcks(keyval, type) {
     const parsed = JSON.parse(JSON.stringify(keyval));
-    // console.log(parsed);
+    // console.log(`${type} setAcks:`, parsed);
     const map = parsed.map((p) => {
         switch (p[0]) {
             case 'election':
@@ -258,26 +261,21 @@ function setAcks(keyval, type) {
                 acks.set('election', parsedElection);
                 break;
             case 'hosts':
-                const parsedHosts = JSON.parse(JSON.stringify(p[1]));
-                parsedHosts.map((h) => {
-                    const hostData = JSON.parse(JSON.stringify(h[1]));
-                    // console.log(`${type}: host Data (${h[0]})`, hostData);
+                console.log(`${type} rawValue:`, p[1]);
+                const parsedHosts = new Map(p[1]);
+                parsedHosts.forEach((hostData, hostName) => {
+                    // console.log('hostName', hostName);
+                    // console.log('hostData', hostData);
                     if (hostData.coordinator == 'true') {
-                        console.log(`${type}: ${h[0]} é coordenador!`);
-                        acks.set('coordinator', h[0]);
+                        console.log(`${type}: ${hostName} é coordenador!`);
+                        acks.set('coordinator', hostName);
                     };
-                    hosts.set(h[0], h[1]);
+                    hosts.set(hostName, hostData);
                 })
+                // console.log(`${type} Hosts: `, parsedHosts);
+                // console.log(`${type} Hosts Entries: `, [...parsedHosts.entries()]);
+                acks.set('hosts', parsedHosts);
                 break;
-            // case 'winner':
-            //     console.log('VENCEDOR:', p[1]);
-            //     if(p[1] === `${HOSTNAME}:${PORT}`){
-            //         console.log('EU SOU O VENCEDOR! Vou chamar os meus vizinhos');
-            //         const winner = percorreAnel(`${HOSTNAME}:${PORT}`);
-            //         acks.set('coordinator', winner);
-            //         acks.delete('election');
-            //     }
-            //     break;
             default:
                 break;
         }
@@ -287,11 +285,8 @@ function setAcks(keyval, type) {
     return map;
 }
 
-function percorreAnel(host) {
-    const newHosts = new Map();
-    acks.get('hosts').map((h) => {
-        newHosts.set(h[0], h[1]);
-    })
+function percorreAnel(host, hosts) {
+    const newHosts = new Map(hosts);
 
     if(!newHosts.has(host)){
         return;
@@ -301,12 +296,12 @@ function percorreAnel(host) {
     let greater = hostData.timestamp;
     let winner = host;
 
-    acks.get('hosts').map((h) => { // Percorre vizinho por vizinho para comparar o timestamp
-        const data = JSON.parse(JSON.stringify(h[1]));
+    newHosts.forEach((hostData, hostName) => { // Percorre vizinho por vizinho para comparar o timestamp
+        const data = JSON.parse(JSON.stringify(hostData));
         if (data.timestamp < greater) {
             greater = data.timestamp;
-            winner = h[0];
-            acks.set('winner', h[0]);
+            winner = hostName;
+            // acks.set('winner', h[0]);
         }
     })
 
